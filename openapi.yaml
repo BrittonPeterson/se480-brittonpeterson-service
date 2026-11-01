@@ -1,0 +1,603 @@
+openapi: "3.1.0"
+info:
+  title: Table Hold
+  version: "1.0.0"
+  description: |
+    Table Hold lets a player find an open table in one game store and hold it for a session, without giving that table to two groups.
+    The version lives in the base URL as /v1. Paths in this document omit that prefix; clients of the deployed service add it.
+    Within v1, nothing a working client depends on changes. No field or operation is removed or renamed, no status code changes for an existing outcome, no request field becomes required, and problem type URLs keep their meaning.
+    Additive changes ship inside v1: new optional fields, new filters, new operations, and new game_tags values. Clients must treat an unknown game tag as unsupported, not as an error.
+    Removing, renaming, or changing a meaning forces /v2, which runs beside v1 for at least six months after v2 is released.
+  contact:
+    name: Britton Peterson
+    url: https://github.com/BrittonPeterson/se480-brittonpeterson-service
+servers:
+  - url: https://se480-brittonpeterson-service.onrender.com/{version}
+    description: Deployed service. The version is part of this base URL.
+    variables:
+      version:
+        default: v1
+        enum: [v1]
+        description: API version. v1 is the only published version.
+tags:
+  - name: Tables
+    description: Tables on the floor of the one store this service covers.
+  - name: Reservations
+    description: A hold on one table for a block of time.
+paths:
+  /tables:
+    get:
+      operationId: listTables
+      tags: [Tables]
+      summary: List tables in the store
+      description: Returns every table. Use the filters to narrow by seats, game, or wheelchair access.
+      parameters:
+        - name: seats_min
+          in: query
+          required: false
+          description: Return tables that seat at least this many players.
+          schema:
+            type: integer
+            minimum: 1
+        - name: game_tag
+          in: query
+          required: false
+          description: Return tables that include this game tag.
+          schema:
+            $ref: "#/components/schemas/GameTag"
+        - name: wheelchair_accessible
+          in: query
+          required: false
+          description: When true, return only tables a wheelchair user can sit at.
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Tables matching the filters. An empty array means none matched.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Table"
+              example:
+                - table_id: tbl_7f3k9q2d
+                  name: Table 4
+                  seats: 4
+                  zone: back room
+                  game_tags: [card_game]
+                  wheelchair_accessible: true
+                  time_zone: America/Chicago
+                  open_hours:
+                    - weekday: saturday
+                      opens: "11:00"
+                      closes: "23:00"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+  /tables/{table_id}:
+    get:
+      operationId: getTable
+      tags: [Tables]
+      summary: Get one table
+      description: Returns the table's name, seats, tags, access, and open hours.
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+      responses:
+        "200":
+          description: The table.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Table"
+              example:
+                table_id: tbl_7f3k9q2d
+                name: Table 4
+                seats: 4
+                zone: back room
+                game_tags: [card_game]
+                wheelchair_accessible: true
+                time_zone: America/Chicago
+                open_hours:
+                  - weekday: saturday
+                    opens: "11:00"
+                    closes: "23:00"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /tables/{table_id}/reservations:
+    get:
+      operationId: listTableReservations
+      tags: [Reservations]
+      summary: List reservations on one table
+      description: Returns reservations on the table, including cancelled ones. Pass a window to see what overlaps that block of time.
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+        - name: window_start
+          in: query
+          required: false
+          description: Include reservations that overlap at or after this instant. Requires an offset.
+          schema:
+            type: string
+            format: date-time
+        - name: window_end
+          in: query
+          required: false
+          description: Include reservations that overlap at or before this instant. Requires an offset.
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Reservations on the table.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Reservation"
+              example:
+                - reservation_id: rsv_8s2k1m0v4q7x3n9bw5zc
+                  table_id: tbl_7f3k9q2d
+                  starts_at: "2026-11-07T18:00:00-06:00"
+                  ends_at: "2026-11-07T22:00:00-06:00"
+                  title: Commander pod
+                  requester:
+                    display_name: "Trần Minh Anh"
+                    email: tran.minhanh@example.edu
+                  player_count: 4
+                  status: confirmed
+                  created_at: "2026-11-01T16:28:00-06:00"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: createReservation
+      tags: [Reservations]
+      summary: Hold a table for a block of time
+      description: |
+        Creates a confirmed reservation when the window is inside open hours and does not overlap another confirmed reservation.
+        The spec promises 409 when the windows overlap. v1 does not yet define the lock that keeps two near-simultaneous creates from both succeeding.
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+      requestBody:
+        required: true
+        description: The window, the player, and an optional session title.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReservationCreate"
+            example:
+              starts_at: "2026-11-07T18:00:00-06:00"
+              ends_at: "2026-11-07T22:00:00-06:00"
+              title: Commander pod
+              requester:
+                display_name: "Trần Minh Anh"
+                email: tran.minhanh@example.edu
+              player_count: 4
+      responses:
+        "201":
+          description: The table is held.
+          headers:
+            Location:
+              description: Path of the new reservation on the deployed service, including /v1.
+              required: true
+              schema:
+                type: string
+                examples:
+                  - /v1/reservations/rsv_8s2k1m0v4q7x3n9bw5zc
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reservation"
+              example:
+                reservation_id: rsv_8s2k1m0v4q7x3n9bw5zc
+                table_id: tbl_7f3k9q2d
+                starts_at: "2026-11-07T18:00:00-06:00"
+                ends_at: "2026-11-07T22:00:00-06:00"
+                title: Commander pod
+                requester:
+                  display_name: "Trần Minh Anh"
+                  email: tran.minhanh@example.edu
+                player_count: 4
+                status: confirmed
+                created_at: "2026-11-01T16:28:00-06:00"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /reservations/{reservation_id}:
+    get:
+      operationId: getReservation
+      tags: [Reservations]
+      summary: Get one reservation
+      description: Returns the reservation, including one that has been cancelled.
+      parameters:
+        - $ref: "#/components/parameters/ReservationId"
+      responses:
+        "200":
+          description: The reservation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reservation"
+              example:
+                reservation_id: rsv_8s2k1m0v4q7x3n9bw5zc
+                table_id: tbl_7f3k9q2d
+                starts_at: "2026-11-07T18:00:00-06:00"
+                ends_at: "2026-11-07T22:00:00-06:00"
+                title: Commander pod
+                requester:
+                  display_name: "Trần Minh Anh"
+                  email: tran.minhanh@example.edu
+                player_count: 4
+                status: confirmed
+                created_at: "2026-11-01T16:28:00-06:00"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      operationId: updateReservation
+      tags: [Reservations]
+      summary: Move or retitle a reservation
+      description: Changes the window, title, or player count. The same rules and overlap check run again, ignoring this reservation.
+      parameters:
+        - $ref: "#/components/parameters/ReservationId"
+      requestBody:
+        required: true
+        description: The fields to change. Send at least one.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReservationPatch"
+            example:
+              title: Commander pod, later start
+              starts_at: "2026-11-07T19:00:00-06:00"
+              ends_at: "2026-11-07T23:00:00-06:00"
+      responses:
+        "200":
+          description: The reservation after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reservation"
+              example:
+                reservation_id: rsv_8s2k1m0v4q7x3n9bw5zc
+                table_id: tbl_7f3k9q2d
+                starts_at: "2026-11-07T19:00:00-06:00"
+                ends_at: "2026-11-07T23:00:00-06:00"
+                title: Commander pod, later start
+                requester:
+                  display_name: "Trần Minh Anh"
+                  email: tran.minhanh@example.edu
+                player_count: 4
+                status: confirmed
+                created_at: "2026-11-01T16:28:00-06:00"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      operationId: cancelReservation
+      tags: [Reservations]
+      summary: Cancel a reservation
+      description: Marks the reservation cancelled. Cancelling it again still returns 204. v1 has no login, so anyone with the id can cancel it.
+      parameters:
+        - $ref: "#/components/parameters/ReservationId"
+      responses:
+        "204":
+          description: The reservation is cancelled. There is no response body.
+        "404":
+          $ref: "#/components/responses/NotFound"
+components:
+  parameters:
+    TableId:
+      name: table_id
+      in: path
+      required: true
+      description: Opaque id of the table.
+      schema:
+        type: string
+        examples: [tbl_7f3k9q2d]
+    ReservationId:
+      name: reservation_id
+      in: path
+      required: true
+      description: Opaque id of the reservation.
+      schema:
+        type: string
+        examples: [rsv_8s2k1m0v4q7x3n9bw5zc]
+  schemas:
+    GameTag:
+      type: string
+      description: A kind of game a table is set up for. An unknown value is unsupported, not an error.
+      enum: [board_game, card_game, miniature, roleplaying, puzzle]
+    Weekday:
+      type: string
+      description: A day name in English, lowercase.
+      enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]
+    OpenHours:
+      type: object
+      description: One day's local clock hours. A weekday absent from a table's open_hours is closed.
+      required: [weekday, opens, closes]
+      properties:
+        weekday:
+          $ref: "#/components/schemas/Weekday"
+        opens:
+          type: string
+          description: Local opening time, 24-hour HH:MM.
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          examples: ["11:00"]
+        closes:
+          type: string
+          description: Local closing time, 24-hour HH:MM. Later than opens.
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          examples: ["23:00"]
+    Table:
+      type: object
+      description: A table on the floor. Tables are seeded by the store and read-only in v1.
+      required: [table_id, name, seats, zone, game_tags, wheelchair_accessible, time_zone, open_hours]
+      properties:
+        table_id:
+          type: string
+          description: Opaque id. Not a counter, so a caller cannot walk every table by incrementing it.
+          examples: [tbl_7f3k9q2d]
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: Name posted at the table, for example "Table 4".
+          examples: ["Table 4"]
+        seats:
+          type: integer
+          minimum: 1
+          maximum: 12
+          description: How many players can sit here.
+          examples: [4]
+        zone:
+          type: string
+          minLength: 1
+          maxLength: 40
+          description: Where the table is in the store. A floor label may be "LL" or "M", not a number.
+          examples: ["back room"]
+        game_tags:
+          type: array
+          description: Games this table is set up for. May be empty.
+          items:
+            $ref: "#/components/schemas/GameTag"
+        wheelchair_accessible:
+          type: boolean
+          description: True when a wheelchair user can sit at this table.
+          examples: [true]
+        time_zone:
+          type: string
+          description: IANA time zone of the store. Reservation instants are returned with an offset in this zone.
+          examples: [America/Chicago]
+        open_hours:
+          type: array
+          description: Local hours the table can be reserved. A missing weekday means the table is closed that day.
+          items:
+            $ref: "#/components/schemas/OpenHours"
+    Requester:
+      type: object
+      description: The player who holds the table. One name field, so a single name or a long name is valid.
+      required: [display_name, email]
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: The name the player goes by, as one field. Any script, spaces, and apostrophes are valid. There is no separate first and last name.
+          examples: ["Trần Minh Anh"]
+        email:
+          type: string
+          format: email
+          description: Where a confirmation is sent. A shared household or club address is valid.
+          examples: [tran.minhanh@example.edu]
+    Reservation:
+      type: object
+      description: A hold on one table. Cancelled reservations stay and keep status cancelled.
+      required: [reservation_id, table_id, starts_at, ends_at, requester, status, created_at]
+      properties:
+        reservation_id:
+          type: string
+          description: Opaque id. Not a counter.
+          examples: [rsv_8s2k1m0v4q7x3n9bw5zc]
+        table_id:
+          type: string
+          description: The table this hold is for.
+          examples: [tbl_7f3k9q2d]
+        starts_at:
+          type: string
+          format: date-time
+          description: When the hold starts. An offset is required, for example 2026-11-07T18:00:00-06:00.
+          examples: ["2026-11-07T18:00:00-06:00"]
+        ends_at:
+          type: string
+          format: date-time
+          description: When the hold ends. Must be 1 to 6 hours after starts_at, inside open hours, and at most 14 days ahead.
+          examples: ["2026-11-07T22:00:00-06:00"]
+        title:
+          type: string
+          maxLength: 120
+          description: Optional name for the session, for example the game being played.
+          examples: ["Commander pod"]
+        requester:
+          $ref: "#/components/schemas/Requester"
+        player_count:
+          type: integer
+          minimum: 1
+          maximum: 12
+          description: How many players are coming. Cannot be more than the table's seats.
+          examples: [4]
+        status:
+          type: string
+          description: confirmed while the hold stands. cancelled after a delete. Read-only.
+          enum: [confirmed, cancelled]
+        created_at:
+          type: string
+          format: date-time
+          description: When the hold was created, with an offset. Read-only.
+          examples: ["2026-11-01T16:28:00-06:00"]
+    ReservationCreate:
+      type: object
+      description: Fields the player sends to hold a table. The table id comes from the path.
+      required: [starts_at, ends_at, requester]
+      properties:
+        starts_at:
+          type: string
+          format: date-time
+          description: When the hold starts. An offset is required.
+          examples: ["2026-11-07T18:00:00-06:00"]
+        ends_at:
+          type: string
+          format: date-time
+          description: When the hold ends. One to six hours after starts_at.
+          examples: ["2026-11-07T22:00:00-06:00"]
+        title:
+          type: string
+          maxLength: 120
+          description: Optional name for the session.
+          examples: ["Commander pod"]
+        requester:
+          $ref: "#/components/schemas/Requester"
+        player_count:
+          type: integer
+          minimum: 1
+          maximum: 12
+          description: How many players are coming. Cannot be more than the table's seats.
+          examples: [4]
+    ReservationPatch:
+      type: object
+      description: Fields that can change on an existing hold. Send at least one.
+      minProperties: 1
+      properties:
+        starts_at:
+          type: string
+          format: date-time
+          description: New start. An offset is required. The overlap check runs again.
+          examples: ["2026-11-07T19:00:00-06:00"]
+        ends_at:
+          type: string
+          format: date-time
+          description: New end. An offset is required.
+          examples: ["2026-11-07T23:00:00-06:00"]
+        title:
+          type: string
+          maxLength: 120
+          description: New session name.
+          examples: ["Commander pod, later start"]
+        player_count:
+          type: integer
+          minimum: 1
+          maximum: 12
+          description: New player count. Cannot be more than the table's seats.
+          examples: [4]
+    FieldError:
+      type: object
+      description: One field that failed validation.
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          description: Name of the field, such as starts_at.
+          examples: [starts_at]
+        message:
+          type: string
+          description: Plain words a player can act on, with an example they can copy.
+          examples: ["needs an offset, for example 2026-11-07T18:00:00-06:00"]
+    ConflictWindow:
+      type: object
+      description: The confirmed window that already holds the table. Never the other group's name.
+      required: [starts_at, ends_at]
+      properties:
+        starts_at:
+          type: string
+          format: date-time
+          description: Start of the conflicting hold, with an offset.
+          examples: ["2026-11-07T18:00:00-06:00"]
+        ends_at:
+          type: string
+          format: date-time
+          description: End of the conflicting hold, with an offset.
+          examples: ["2026-11-07T22:00:00-06:00"]
+    ProblemDetails:
+      type: object
+      description: Error body for every non-2xx response (RFC 9457).
+      required: [type, title, status, detail, instance]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: Stable URL naming the kind of problem. The same string keeps the same meaning for the life of v1.
+          examples: ["https://se480-brittonpeterson-service.onrender.com/problems/table-conflict"]
+        title:
+          type: string
+          description: One plain sentence naming the problem. The same sentence every time for that type.
+          examples: ["The table is already held for part of that time"]
+        status:
+          type: integer
+          description: The HTTP status code, repeated in the body.
+          examples: [409]
+        detail:
+          type: string
+          description: What happened this time and what the caller can do next. No blame, no jargon.
+          examples: ["Table 4 is held from 18:00 to 22:00 on Sat 7 Nov 2026 (America/Chicago). Choose a time outside that window, or another table."]
+        instance:
+          type: string
+          description: The request path on the deployed service, including /v1.
+          examples: ["/v1/tables/tbl_7f3k9q2d/reservations"]
+        errors:
+          type: array
+          description: Validation only. One entry per field.
+          items:
+            $ref: "#/components/schemas/FieldError"
+        conflicts_with:
+          $ref: "#/components/schemas/ConflictWindow"
+  responses:
+    ValidationFailed:
+      description: A field is missing, malformed, or breaks a rule. Fix the fields under errors and send the request again.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            type: https://se480-brittonpeterson-service.onrender.com/problems/validation-failed
+            title: Some fields in the request are not valid
+            status: 400
+            detail: Fix the fields under errors and try again.
+            instance: /v1/tables/tbl_7f3k9q2d/reservations
+            errors:
+              - field: starts_at
+                message: "needs an offset, for example 2026-11-07T18:00:00-06:00"
+              - field: ends_at
+                message: must be later than starts_at
+    NotFound:
+      description: No table or reservation has that id.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            type: https://se480-brittonpeterson-service.onrender.com/problems/not-found
+            title: Nothing was found with that id
+            status: 404
+            detail: No table has id tbl_missing. List tables and choose an id from that response.
+            instance: /v1/tables/tbl_missing
+    Conflict:
+      description: The table already has a confirmed reservation in that window. The body says when, and does not name the other group.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            type: https://se480-brittonpeterson-service.onrender.com/problems/table-conflict
+            title: The table is already held for part of that time
+            status: 409
+            detail: Table 4 is held from 18:00 to 22:00 on Sat 7 Nov 2026 (America/Chicago). Choose a time outside that window, or another table.
+            instance: /v1/tables/tbl_7f3k9q2d/reservations
+            conflicts_with:
+              starts_at: "2026-11-07T18:00:00-06:00"
+              ends_at: "2026-11-07T22:00:00-06:00"
