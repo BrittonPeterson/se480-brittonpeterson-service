@@ -1,6 +1,6 @@
 # se480-brittonpeterson-service
 
-Deployed at: not deployed yet. After the Render deploy, replace this line with the public `https://` URL and no trailing slash.
+Deployed at: https://se480-brittonpeterson-service.onrender.com
 
 ## Run it
 Open this repository in a Codespace (Code → Codespaces → Create codespace on main). The dev container installs `requirements.txt` before the terminal is ready. Then:
