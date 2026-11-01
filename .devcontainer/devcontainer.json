@@ -1,0 +1,15 @@
+{
+  "name": "SE 480 service",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "postCreateCommand": "pip install -r requirements.txt",
+  "forwardPorts": [8000],
+  "portsAttributes": { "8000": { "label": "service" } },
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python"]
+    }
+  }
+}
