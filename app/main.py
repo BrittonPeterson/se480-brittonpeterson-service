@@ -1,11 +1,11 @@
 from fastapi import FastAPI
 
-app = FastAPI(title="SE 480 hello service")
+app = FastAPI(title="se480-brittonpeterson-service")
 
 
 @app.get("/")
 def hello():
-    return {"message": "Hello from SE 480"}
+    return {"message": "Hello from Britton Peterson's SE 480 service"}
 
 
 @app.get("/health")
