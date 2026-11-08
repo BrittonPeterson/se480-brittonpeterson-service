@@ -1,0 +1,8 @@
+# Settings Schemathesis reads on its own when the contract test runs (Lab 3 task 6).
+# Keep this file at the repository root, next to openapi.yaml.
+
+[checks.positive_data_acceptance]
+# A body can match the schema and still break a rule the schema cannot express
+# (ends before start, outside open hours, more players than seats). The spec
+# promises 400 for those. 422 is listed for specs that chose it.
+expected-statuses = ["2xx", "400", "404", "409", "422"]
