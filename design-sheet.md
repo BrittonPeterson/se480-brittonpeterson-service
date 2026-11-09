@@ -51,6 +51,7 @@ Paths in `openapi.yaml` omit `/v1` because the version is the server URL. Client
 | --- | --- | --- | --- |
 | GET | /tables | List tables. Filter by seats_min, game_tag, and wheelchair_accessible. | 200 |
 | GET | /tables/{table_id} | One table, with its tags and open hours. | 200 |
+| GET | /tables/{table_id}/openings | Free stretches on one local day: open hours minus confirmed holds. Required date, optional min_length_minutes. | 200 |
 | GET | /tables/{table_id}/reservations | Reservations on that table. Optional window_start and window_end. | 200 |
 | POST | /tables/{table_id}/reservations | Hold the table. The rules and the overlap check run here. | 201 and a Location header |
 | GET | /reservations/{reservation_id} | One reservation, including cancelled ones. | 200 |
@@ -80,5 +81,6 @@ A request that breaks a rule is 400. A request that is valid and collides with t
 | POST /tables/{table_id}/reservations | A 201 for a window that overlaps a confirmed reservation | Both groups, and the first one most: they did nothing wrong and find another group at the table |
 | DELETE /reservations/{reservation_id} | Cancelling a reservation the caller does not hold. v1 has no login, so the id is the only key | The group that loses the table with no notice |
 | GET /tables/{table_id}/reservations | A window that omits a reservation, or shows it in the wrong offset | The walk-in who trusted a free-looking table |
+| GET /tables/{table_id}/openings | A stretch offered as free that a confirmed hold covers | The player who plans a night around it, then gets a 409 or, through the race, a double booking |
 
 Seeded failure: two creates a few hundred milliseconds apart. Each check sees no overlap, and both return 201. Nothing in the logs is an error. The failure shows up when both groups arrive for the same table.

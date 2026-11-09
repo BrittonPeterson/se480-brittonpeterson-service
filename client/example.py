@@ -1,4 +1,4 @@
-"""The first consumer of Table Hold: list, create, and handle a conflict for a person.
+"""The first consumer of Table Hold: list, find openings, create, and handle a conflict for a person.
 
 Run against the deployed service (the first call may take about 30 seconds while Render wakes it):
 
@@ -42,6 +42,14 @@ def main(base_url: str) -> None:
         table_id = tables.json()[0]["table_id"]
 
         start = (datetime.now(TZ) + timedelta(days=2)).replace(hour=12, minute=0, second=0, microsecond=0)
+        free = api.get(f"/tables/{table_id}/openings", params={"date": start.date().isoformat(), "min_length_minutes": 120})
+        free.raise_for_status()
+        print(f"\nFree stretches of two hours or more on {start:%a %d %b}:")
+        for stretch in free.json():
+            print(f"  {stretch['starts_at'][11:16]} to {stretch['ends_at'][11:16]}")
+        if not free.json():
+            print("  none")
+
         booking = {
             "starts_at": start.isoformat(),
             "ends_at": (start + timedelta(hours=2)).isoformat(),

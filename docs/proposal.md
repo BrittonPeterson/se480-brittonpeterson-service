@@ -6,7 +6,7 @@ A player who wants a table at their game store tonight needs to see which tables
 
 ## Scope
 
-One store, two resources (tables and reservations), seven operations. In for Milestone 2: everything in `openapi.yaml` v1, deployed on Render, with `client/example.py` able to list, hold, and show a conflict. Stretch, and not part of Milestone 2: accounts, payments, inventory, store admin, and a lock that stops two near-simultaneous creates from both succeeding.
+One store, two resources (tables and reservations), eight operations, including one that lists a table's free stretches for a day. In for Milestone 2: everything in `openapi.yaml` v1, deployed on Render, with `client/example.py` able to list, hold, and show a conflict. Stretch, and not part of Milestone 2: accounts, payments, inventory, store admin, and a lock that stops two near-simultaneous creates from both succeeding.
 
 ## Users
 
@@ -35,11 +35,11 @@ flowchart LR
 ## What changed since the pitch
 
 - There was no class pitch and no round-robin review, so no review comment was applied or declined. Table Hold was chosen as the project before the spec was written.
-- Lab 2 spec review from a classmate has not arrived. Nothing in `openapi.yaml` was changed for feedback.
+- A review said the service followed the course example too closely and suggested a new operation or a new kind of error. Applied: `GET /tables/{table_id}/openings` returns a day's free stretches (open hours minus confirmed holds), which the example has no equivalent for. It went into `openapi.yaml` first, then the code and tests.
 - Lab 3 implemented the sheet as written: holds are 1 to 6 hours, inside open hours, not in the past, at most 14 days ahead, and a second confirmed hold on the same window is 409. The check-then-insert race was left in place on purpose. It is the failure this proposal names.
 
 ## Plan and risks
 
-Milestone 2 (Nov 22): the seven operations as specified, still deployed, plus structured logs and a `/health` body that reports how many reservations are in memory. Final (Fri Dec 4): reproduce the double-booking, prevent it, and write the safety case around that fix.
+Milestone 2 (Nov 22): the eight operations as specified, still deployed, plus structured logs and a `/health` body that reports how many reservations are in memory. Final (Fri Dec 4): reproduce the double-booking, prevent it, and write the safety case around that fix.
 
 Risks: the in-memory store drops every reservation when Render sleeps or restarts (response: a durable store in Week 5, not before). The free instance takes about half a minute to wake (response: the client's 60-second timeout and the wake-up line). New ideas such as payments or accounts (response: they stay on the stretch list above and do not enter v1).

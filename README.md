@@ -45,12 +45,16 @@ In a second terminal, with no `/v1` in the path:
 To see a problem-details body, add `-H "Prefer: code=404"` on a path that documents 404, such as `/tables/tbl_7f3k9q2d`.
 
 ## Change applied
-No classmate review of the Lab 2 spec has been posted, so the spec was not changed for feedback. While implementing, explicit null on an optional field was rejected in the code rather than allowed in the spec, because the spec already says those fields are integers or strings and not null.
+Review received: "Your service works fine, but looks to follow the example exactly. I would add an additional operation or a new kind of error that diverges it from the working example."
+
+Change: a new operation, `GET /v1/tables/{table_id}/openings?date=YYYY-MM-DD`, that the course example does not have. It returns the free stretches on one day: the table's open hours with confirmed holds cut out, earliest first, in the table's time zone. Today's stretches start at the next quarter hour, and `min_length_minutes` (60 to 360) leaves out gaps too short to book. A player can ask "when is Table 4 free on Tuesday?" in one call instead of listing reservations and working out the gaps. It is in `openapi.yaml`, the design sheet, `app/routers/tables.py`, and `tests/test_openings.py`, and the contract and drift tests cover it. Holds that start in the past are also now rejected with 400.
+
+While implementing, explicit null on an optional field was rejected in the code rather than allowed in the spec, because the spec already says those fields are integers or strings and not null.
 
 ## What's here
 - `app/` — the Table Hold FastAPI service (`/v1` plus `GET /health`)
 - `tests/` — smoke, unit, and contract tests
-- `client/example.py` — a small client that lists tables, holds one, and shows a conflict in sentences
+- `client/example.py` — a small client that lists tables, shows a day's openings, holds one, and shows a conflict in sentences
 - `docs/proposal.md` — the Milestone 1 proposal
 - `openapi.yaml` — the Table Hold API spec
 - `design-sheet.md` — the seven-line sheet the spec was written from
@@ -68,4 +72,4 @@ none
 ## AI tools used
 Lab 1: Cursor helped a little. Most of the work was done by me.
 Lab 2: Cursor drafted `openapi.yaml`, `.spectral.yaml`, the Makefile, `design-sheet.md`, and the Lab 2 sections of this README from the Table Hold design I chose. I am responsible for every line of the spec.
-Lab 3: Cursor drafted the service (`app/models.py`, `app/errors.py`, `app/rules.py`, `app/store.py`, the routers), the unit and contract tests, `client/example.py`, `schemathesis.toml`, `docs/proposal.md`, and the Lab 3 README sections, following the course reference shape and this spec. I am responsible for every line.
+Lab 3: Cursor drafted the service (`app/models.py`, `app/errors.py`, `app/rules.py`, `app/store.py`, the routers), the unit and contract tests, `client/example.py`, `schemathesis.toml`, `docs/proposal.md`, and the Lab 3 README sections, following the course reference shape and this spec. After the review, Cursor also drafted the openings operation and the past-hold rule, with their spec text and tests. I am responsible for every line.

@@ -53,6 +53,13 @@ class Table(BaseModel):
     open_hours: list[OpenHours] = Field(description="Local hours the table can be reserved. A missing weekday means the table is closed that day.")
 
 
+class Opening(BaseModel):
+    """A stretch of one day when the table is open and not held."""
+
+    starts_at: AwareDatetime = Field(description="When the free stretch starts, with an offset in the table's time zone.")
+    ends_at: AwareDatetime = Field(description="When the next hold starts or the table closes, with an offset in the table's time zone.")
+
+
 class Requester(BaseModel):
     """The player who holds the table. One name field, so a single name or a long name is valid."""
 

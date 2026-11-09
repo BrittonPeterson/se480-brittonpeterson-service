@@ -103,6 +103,52 @@ paths:
                     closes: "23:00"
         "404":
           $ref: "#/components/responses/NotFound"
+  /tables/{table_id}/openings:
+    get:
+      operationId: listTableOpenings
+      tags: [Tables]
+      summary: Find free stretches on one table for a day
+      description: |
+        Returns the stretches of the given local day when the table is open and no confirmed reservation holds it, earliest first.
+        Any hold of 1 to 6 hours inside a stretch passes the overlap check, as long as it starts within 14 days.
+        Today's stretches start at the next quarter hour. A closed day returns an empty array.
+      parameters:
+        - $ref: "#/components/parameters/TableId"
+        - name: date
+          in: query
+          required: true
+          description: The local day in the table's time zone, YYYY-MM-DD. Today through 14 days ahead.
+          schema:
+            type: string
+            format: date
+            examples: ["2026-11-10"]
+        - name: min_length_minutes
+          in: query
+          required: false
+          description: Leave out stretches shorter than this. Defaults to 60, the shortest hold.
+          schema:
+            type: integer
+            minimum: 60
+            maximum: 360
+            default: 60
+      responses:
+        "200":
+          description: Free stretches on that day. An empty array means nothing is free for that long.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Opening"
+              example:
+                - starts_at: "2026-11-10T09:00:00-06:00"
+                  ends_at: "2026-11-10T12:00:00-06:00"
+                - starts_at: "2026-11-10T14:00:00-06:00"
+                  ends_at: "2026-11-10T22:00:00-06:00"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /tables/{table_id}/reservations:
     get:
       operationId: listTableReservations
@@ -380,6 +426,21 @@ components:
           description: Local hours the table can be reserved. A missing weekday means the table is closed that day.
           items:
             $ref: "#/components/schemas/OpenHours"
+    Opening:
+      type: object
+      description: A stretch of one day when the table is open and not held.
+      required: [starts_at, ends_at]
+      properties:
+        starts_at:
+          type: string
+          format: date-time
+          description: When the free stretch starts, with an offset in the table's time zone.
+          examples: ["2026-11-10T14:00:00-06:00"]
+        ends_at:
+          type: string
+          format: date-time
+          description: When the next hold starts or the table closes, with an offset in the table's time zone.
+          examples: ["2026-11-10T22:00:00-06:00"]
     Requester:
       type: object
       description: The player who holds the table. One name field, so a single name or a long name is valid.

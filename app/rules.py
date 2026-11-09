@@ -60,6 +60,23 @@ def overlaps(a_start: datetime, a_end: datetime, b_start: datetime, b_end: datet
     return a_start < b_end and a_end > b_start
 
 
+def free_stretches(
+    opens: datetime, closes: datetime, busy: list[tuple[datetime, datetime]], min_length: timedelta
+) -> list[tuple[datetime, datetime]]:
+    """The gaps between busy windows inside [opens, closes], each at least min_length long."""
+    stretches = []
+    cursor = opens
+    for start, end in sorted(busy):
+        if start >= closes:
+            break
+        if start - cursor >= min_length:
+            stretches.append((cursor, start))
+        cursor = max(cursor, end)
+    if closes - cursor >= min_length:
+        stretches.append((cursor, closes))
+    return stretches
+
+
 def find_conflict(starts_at: datetime, ends_at: datetime, reservations, *, ignore_id: str | None = None):
     """The first confirmed reservation overlapping the window, or None.
 
