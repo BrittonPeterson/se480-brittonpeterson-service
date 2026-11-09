@@ -412,7 +412,7 @@ components:
         starts_at:
           type: string
           format: date-time
-          description: When the hold starts. An offset is required, for example 2026-11-07T18:00:00-06:00.
+          description: When the hold starts. An offset is required, for example 2026-11-07T18:00:00-06:00. Cannot be in the past when the hold is created or moved.
           examples: ["2026-11-07T18:00:00-06:00"]
         ends_at:
           type: string
@@ -449,7 +449,7 @@ components:
         starts_at:
           type: string
           format: date-time
-          description: When the hold starts. An offset is required.
+          description: When the hold starts. An offset is required. Cannot be in the past.
           examples: ["2026-11-07T18:00:00-06:00"]
         ends_at:
           type: string
@@ -477,7 +477,7 @@ components:
         starts_at:
           type: string
           format: date-time
-          description: New start. An offset is required. The overlap check runs again.
+          description: New start. An offset is required. Cannot be in the past. The overlap check runs again.
           examples: ["2026-11-07T19:00:00-06:00"]
         ends_at:
           type: string

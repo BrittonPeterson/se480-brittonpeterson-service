@@ -37,9 +37,17 @@ def reservation_or_404(reservation_id: str) -> Reservation:
     return reservation
 
 
-def check_window(table: Table, starts_at: datetime, ends_at: datetime, player_count: int | None, *, ignore_id: str | None = None) -> None:
+def check_window(
+    table: Table,
+    starts_at: datetime,
+    ends_at: datetime,
+    player_count: int | None,
+    *,
+    ignore_id: str | None = None,
+    check_past: bool = True,
+) -> None:
     """Rules first (400), then the table's state (409)."""
-    errors = rules.window_errors(starts_at, ends_at, now=datetime.now(timezone.utc))
+    errors = rules.window_errors(starts_at, ends_at, now=datetime.now(timezone.utc), check_past=check_past)
     errors += rules.open_hours_errors(starts_at, ends_at, table.time_zone, table.open_hours)
     if player_count is not None and player_count > table.seats:
         errors.append({"field": "player_count", "message": f"{table.name} seats {table.seats}"})
@@ -167,7 +175,14 @@ def update_reservation(reservation_id: str, body: ReservationPatch) -> Reservati
         )
     table = store.TABLES[reservation.table_id]
     updated = reservation.model_copy(update=changes)
-    check_window(table, updated.starts_at, updated.ends_at, updated.player_count, ignore_id=reservation_id)
+    check_window(
+        table,
+        updated.starts_at,
+        updated.ends_at,
+        updated.player_count,
+        ignore_id=reservation_id,
+        check_past="starts_at" in changes,
+    )
     store.RESERVATIONS[reservation_id] = updated
     return in_table_zone(updated, table)
 

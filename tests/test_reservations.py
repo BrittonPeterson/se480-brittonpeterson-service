@@ -3,6 +3,7 @@
 Each test asserts the status, the body shape, and, for an error, the problem body.
 """
 
+from app import store
 from tests.conftest import TABLE, body, window
 
 PROBLEM = "application/problem+json"
@@ -44,6 +45,13 @@ def test_create_with_end_before_start_is_400(client):
     response = client.post(f"/v1/tables/{TABLE}/reservations", json=body(ends_at, starts_at))
     assert response.status_code == 400
     assert response.json()["errors"][0] == {"field": "ends_at", "message": "must be later than starts_at"}
+
+
+def test_create_in_the_past_is_400(client):
+    starts_at, ends_at = window(day_offset=-1)
+    response = client.post(f"/v1/tables/{TABLE}/reservations", json=body(starts_at, ends_at))
+    assert response.status_code == 400
+    assert {"field": "starts_at", "message": "must not be in the past"} in response.json()["errors"]
 
 
 def test_create_over_capacity_is_400(client):
@@ -133,6 +141,32 @@ def test_patch_retitles_and_keeps_the_window(client):
     assert response.status_code == 200
     assert response.json()["title"] == "Commander pod, later start"
     assert response.json()["starts_at"] == created["starts_at"]
+
+
+def test_patch_moving_into_the_past_is_400(client):
+    created = create(client).json()
+    starts_at, ends_at = window(day_offset=-1)
+    response = client.patch(
+        f"/v1/reservations/{created['reservation_id']}",
+        json={"starts_at": starts_at, "ends_at": ends_at},
+    )
+    assert response.status_code == 400
+    assert response.json()["errors"][0] == {"field": "starts_at", "message": "must not be in the past"}
+
+
+def test_patch_retitles_a_hold_that_already_started(client):
+    from datetime import datetime
+
+    created = create(client).json()
+    rid = created["reservation_id"]
+    starts_at, ends_at = window(day_offset=-1)
+    store.RESERVATIONS[rid] = store.RESERVATIONS[rid].model_copy(update={
+        "starts_at": datetime.fromisoformat(starts_at),
+        "ends_at": datetime.fromisoformat(ends_at),
+    })
+    response = client.patch(f"/v1/reservations/{rid}", json={"title": "Ran long"})
+    assert response.status_code == 200
+    assert response.json()["title"] == "Ran long"
 
 
 def test_patch_with_no_fields_is_400(client):

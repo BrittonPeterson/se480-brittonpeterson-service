@@ -12,9 +12,15 @@ MAX_LENGTH = timedelta(hours=6)
 MAX_AHEAD = timedelta(days=14)
 
 
-def window_errors(starts_at: datetime, ends_at: datetime, now: datetime) -> list[dict]:
-    """Rule violations in a requested window, as problem-details errors entries."""
+def window_errors(starts_at: datetime, ends_at: datetime, now: datetime, *, check_past: bool = True) -> list[dict]:
+    """Rule violations in a requested window, as problem-details errors entries.
+
+    check_past is off when a patch keeps the old start, so a session already
+    under way can still be retitled.
+    """
     errors = []
+    if check_past and starts_at < now:
+        errors.append({"field": "starts_at", "message": "must not be in the past"})
     if ends_at <= starts_at:
         errors.append({"field": "ends_at", "message": "must be later than starts_at"})
         return errors

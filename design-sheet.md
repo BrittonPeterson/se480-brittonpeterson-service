@@ -41,7 +41,7 @@ A weekday missing from `open_hours` is closed. An unknown `game_tags` value is u
 | status | enum: confirmed, cancelled | read-only |
 | created_at | RFC 3339 date-time with an offset | read-only |
 
-Rules on the window: `ends_at` is after `starts_at`, the length is 1 to 6 hours, the window is inside open hours, and the start is at most 14 days ahead. A time with no offset is rejected. Cancelled reservations stay, with status `cancelled`.
+Rules on the window: `ends_at` is after `starts_at`, the length is 1 to 6 hours, the window is inside open hours, and the start is not in the past and at most 14 days ahead. A patch that keeps the old start skips the past check, so a session already under way can be retitled. A time with no offset is rejected. Cancelled reservations stay, with status `cancelled`.
 
 ## 4. Operations
 

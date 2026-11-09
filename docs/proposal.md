@@ -36,7 +36,7 @@ flowchart LR
 
 - There was no class pitch and no round-robin review, so no review comment was applied or declined. Table Hold was chosen as the project before the spec was written.
 - Lab 2 spec review from a classmate has not arrived. Nothing in `openapi.yaml` was changed for feedback.
-- Lab 3 implemented the sheet as written: holds are 1 to 6 hours, inside open hours, at most 14 days ahead, and a second confirmed hold on the same window is 409. The check-then-insert race was left in place on purpose. It is the failure this proposal names.
+- Lab 3 implemented the sheet as written: holds are 1 to 6 hours, inside open hours, not in the past, at most 14 days ahead, and a second confirmed hold on the same window is 409. The check-then-insert race was left in place on purpose. It is the failure this proposal names.
 
 ## Plan and risks
 
