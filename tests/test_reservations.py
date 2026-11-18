@@ -106,7 +106,9 @@ def test_create_with_an_unknown_requester_field_is_400(client):
     payload["requester"]["is_admin"] = True
     response = client.post(f"/v1/tables/{TABLE}/reservations", json=payload)
     assert response.status_code == 400
-    assert response.json()["errors"][0]["field"] == "requester.is_admin"
+    assert response.json()["errors"] == [
+        {"field": "requester.is_admin", "message": "is not a field this request accepts; remove it"}
+    ]
 
 
 def test_create_with_an_unknown_top_level_field_is_400(client):

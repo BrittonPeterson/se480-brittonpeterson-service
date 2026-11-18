@@ -79,6 +79,7 @@ _MESSAGES = {
     "timezone_aware": "needs an offset, for example 2026-11-07T18:00:00-06:00",
     "datetime_from_date_parsing": "needs an offset, for example 2026-11-07T18:00:00-06:00",
     "missing": "is required",
+    "extra_forbidden": "is not a field this request accepts; remove it",
 }
 
 
