@@ -8,8 +8,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -r requirements.txt
-      - run: pytest -q
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Static analysis (ruff)
+        run: ruff check . && ruff format --check .
+      - name: Tests with coverage (smoke, unit, contract; floor in pyproject.toml)
+        run: python -m pytest -q --cov=app --cov-report=term-missing
+      - name: Dependency audit (pip-audit)
+        run: pip-audit -r requirements.txt
   deployed-smoke:
     if: vars.APP_URL != ''
     needs: smoke

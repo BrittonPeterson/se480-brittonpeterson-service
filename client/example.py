@@ -38,11 +38,18 @@ def main(base_url: str) -> None:
         tables.raise_for_status()
         print("Tables that seat four or more:")
         for table in tables.json():
-            print(f"  {table['table_id']}  {table['name']} ({table['zone']}, seats {table['seats']})")
+            print(
+                f"  {table['table_id']}  {table['name']} ({table['zone']}, seats {table['seats']})"
+            )
         table_id = tables.json()[0]["table_id"]
 
-        start = (datetime.now(TZ) + timedelta(days=2)).replace(hour=12, minute=0, second=0, microsecond=0)
-        free = api.get(f"/tables/{table_id}/openings", params={"date": start.date().isoformat(), "min_length_minutes": 120})
+        start = (datetime.now(TZ) + timedelta(days=2)).replace(
+            hour=12, minute=0, second=0, microsecond=0
+        )
+        free = api.get(
+            f"/tables/{table_id}/openings",
+            params={"date": start.date().isoformat(), "min_length_minutes": 120},
+        )
         free.raise_for_status()
         print(f"\nFree stretches of two hours or more on {start:%a %d %b}:")
         for stretch in free.json():
@@ -61,7 +68,9 @@ def main(base_url: str) -> None:
         print(f"\nHolding {table_id} from {start:%a %H:%M} for two hours...")
         first = api.post(f"/tables/{table_id}/reservations", json=booking)
         if first.status_code == 201:
-            print(f"  Reserved. Reservation {first.json()['reservation_id']}; see {first.headers['location']}")
+            print(
+                f"  Reserved. Reservation {first.json()['reservation_id']}; see {first.headers['location']}"
+            )
         else:
             say(first.json())
             return
@@ -75,7 +84,11 @@ def main(base_url: str) -> None:
 
         print("\nCancelling the first one so the slot is free again...")
         gone = api.delete(first.headers["location"].removeprefix("/v1"))
-        print(f"  Cancelled ({gone.status_code})." if gone.status_code == 204 else f"  Unexpected: {gone.status_code} {gone.text}")
+        print(
+            f"  Cancelled ({gone.status_code})."
+            if gone.status_code == 204
+            else f"  Unexpected: {gone.status_code} {gone.text}"
+        )
 
 
 if __name__ == "__main__":

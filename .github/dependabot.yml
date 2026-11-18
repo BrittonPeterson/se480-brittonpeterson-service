@@ -1,0 +1,14 @@
+# Lab 4: dependency hygiene. Once a week Dependabot opens a pull request for
+# each pinned package with a newer release; CI runs on the PR, so a green run
+# is the evidence the upgrade is safe. Merge or close; never ignore.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

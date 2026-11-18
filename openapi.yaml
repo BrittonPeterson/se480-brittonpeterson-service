@@ -443,8 +443,9 @@ components:
           examples: ["2026-11-10T22:00:00-06:00"]
     Requester:
       type: object
-      description: The player who holds the table. One name field, so a single name or a long name is valid.
+      description: The player who holds the table. One name field, so a single name or a long name is valid. Unknown fields are rejected.
       required: [display_name, email]
+      additionalProperties: false
       properties:
         display_name:
           type: string
@@ -504,8 +505,9 @@ components:
           examples: ["2026-11-01T16:28:00-06:00"]
     ReservationCreate:
       type: object
-      description: Fields the player sends to hold a table. The table id comes from the path.
+      description: Fields the player sends to hold a table. The table id comes from the path. Unknown fields are rejected.
       required: [starts_at, ends_at, requester]
+      additionalProperties: false
       properties:
         starts_at:
           type: string
@@ -532,8 +534,9 @@ components:
           examples: [4]
     ReservationPatch:
       type: object
-      description: Fields that can change on an existing hold. Send at least one.
+      description: Fields that can change on an existing hold. Send at least one. Unknown fields are rejected.
       minProperties: 1
+      additionalProperties: false
       properties:
         starts_at:
           type: string

@@ -7,7 +7,7 @@ instance that happens after about fifteen idle minutes. That is Week 5's problem
 import secrets
 import string
 
-from app.models import OpenHours, Table, Reservation
+from app.models import OpenHours, Reservation, Table
 
 _ALPHABET = string.ascii_lowercase + string.digits
 _DAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")

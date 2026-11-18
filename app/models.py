@@ -36,7 +36,12 @@ class Table(BaseModel):
         description="Opaque id. Not a counter, so a caller cannot walk every table by incrementing it.",
         examples=["tbl_7f3k9q2d"],
     )
-    name: str = Field(min_length=1, max_length=80, description='Name posted at the table, for example "Table 4".', examples=["Table 4"])
+    name: str = Field(
+        min_length=1,
+        max_length=80,
+        description='Name posted at the table, for example "Table 4".',
+        examples=["Table 4"],
+    )
     seats: int = Field(ge=1, le=12, description="How many players can sit here.", examples=[4])
     zone: str = Field(
         min_length=1,
@@ -45,23 +50,33 @@ class Table(BaseModel):
         examples=["back room"],
     )
     game_tags: list[GameTag] = Field(description="Games this table is set up for. May be empty.")
-    wheelchair_accessible: bool = Field(description="True when a wheelchair user can sit at this table.", examples=[True])
+    wheelchair_accessible: bool = Field(
+        description="True when a wheelchair user can sit at this table.", examples=[True]
+    )
     time_zone: str = Field(
         description="IANA time zone of the store. Reservation instants are returned with an offset in this zone.",
         examples=["America/Chicago"],
     )
-    open_hours: list[OpenHours] = Field(description="Local hours the table can be reserved. A missing weekday means the table is closed that day.")
+    open_hours: list[OpenHours] = Field(
+        description="Local hours the table can be reserved. A missing weekday means the table is closed that day."
+    )
 
 
 class Opening(BaseModel):
     """A stretch of one day when the table is open and not held."""
 
-    starts_at: AwareDatetime = Field(description="When the free stretch starts, with an offset in the table's time zone.")
-    ends_at: AwareDatetime = Field(description="When the next hold starts or the table closes, with an offset in the table's time zone.")
+    starts_at: AwareDatetime = Field(
+        description="When the free stretch starts, with an offset in the table's time zone."
+    )
+    ends_at: AwareDatetime = Field(
+        description="When the next hold starts or the table closes, with an offset in the table's time zone."
+    )
 
 
 class Requester(BaseModel):
     """The player who holds the table. One name field, so a single name or a long name is valid."""
+
+    model_config = ConfigDict(extra="forbid")
 
     display_name: str = Field(
         min_length=1,
@@ -81,11 +96,28 @@ class ReservationCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    starts_at: AwareDatetime = Field(description="When the hold starts. An offset is required.", examples=["2026-11-07T18:00:00-06:00"])
-    ends_at: AwareDatetime = Field(description="When the hold ends. One to six hours after starts_at.", examples=["2026-11-07T22:00:00-06:00"])
-    title: str | None = Field(default=None, max_length=120, description="Optional name for the session.", examples=["Commander pod"])
+    starts_at: AwareDatetime = Field(
+        description="When the hold starts. An offset is required.",
+        examples=["2026-11-07T18:00:00-06:00"],
+    )
+    ends_at: AwareDatetime = Field(
+        description="When the hold ends. One to six hours after starts_at.",
+        examples=["2026-11-07T22:00:00-06:00"],
+    )
+    title: str | None = Field(
+        default=None,
+        max_length=120,
+        description="Optional name for the session.",
+        examples=["Commander pod"],
+    )
     requester: Requester
-    player_count: int | None = Field(default=None, ge=1, le=12, description="How many players are coming. Cannot be more than the table's seats.", examples=[4])
+    player_count: int | None = Field(
+        default=None,
+        ge=1,
+        le=12,
+        description="How many players are coming. Cannot be more than the table's seats.",
+        examples=[4],
+    )
 
     @field_validator("title", "player_count", mode="before")
     @classmethod
@@ -101,15 +133,34 @@ class Reservation(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    reservation_id: str = Field(description="Opaque id. Not a counter.", examples=["rsv_8s2k1m0v4q7x3n9bw5zc"])
+    reservation_id: str = Field(
+        description="Opaque id. Not a counter.", examples=["rsv_8s2k1m0v4q7x3n9bw5zc"]
+    )
     table_id: str = Field(description="The table this hold is for.", examples=["tbl_7f3k9q2d"])
-    starts_at: AwareDatetime = Field(description="When the hold starts. An offset is required, for example 2026-11-07T18:00:00-06:00.")
-    ends_at: AwareDatetime = Field(description="When the hold ends. Must be 1 to 6 hours after starts_at, inside open hours, and at most 14 days ahead.")
-    title: str | None = Field(default=None, max_length=120, description="Optional name for the session, for example the game being played.")
+    starts_at: AwareDatetime = Field(
+        description="When the hold starts. An offset is required, for example 2026-11-07T18:00:00-06:00."
+    )
+    ends_at: AwareDatetime = Field(
+        description="When the hold ends. Must be 1 to 6 hours after starts_at, inside open hours, and at most 14 days ahead."
+    )
+    title: str | None = Field(
+        default=None,
+        max_length=120,
+        description="Optional name for the session, for example the game being played.",
+    )
     requester: Requester
-    player_count: int | None = Field(default=None, ge=1, le=12, description="How many players are coming. Cannot be more than the table's seats.")
-    status: Literal["confirmed", "cancelled"] = Field(description="confirmed while the hold stands. cancelled after a delete. Read-only.")
-    created_at: AwareDatetime = Field(description="When the hold was created, with an offset. Read-only.")
+    player_count: int | None = Field(
+        default=None,
+        ge=1,
+        le=12,
+        description="How many players are coming. Cannot be more than the table's seats.",
+    )
+    status: Literal["confirmed", "cancelled"] = Field(
+        description="confirmed while the hold stands. cancelled after a delete. Read-only."
+    )
+    created_at: AwareDatetime = Field(
+        description="When the hold was created, with an offset. Read-only."
+    )
 
 
 class ReservationPatch(BaseModel):
@@ -117,10 +168,19 @@ class ReservationPatch(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    starts_at: AwareDatetime | None = Field(default=None, description="New start. An offset is required. The overlap check runs again.")
-    ends_at: AwareDatetime | None = Field(default=None, description="New end. An offset is required.")
+    starts_at: AwareDatetime | None = Field(
+        default=None, description="New start. An offset is required. The overlap check runs again."
+    )
+    ends_at: AwareDatetime | None = Field(
+        default=None, description="New end. An offset is required."
+    )
     title: str | None = Field(default=None, max_length=120, description="New session name.")
-    player_count: int | None = Field(default=None, ge=1, le=12, description="New player count. Cannot be more than the table's seats.")
+    player_count: int | None = Field(
+        default=None,
+        ge=1,
+        le=12,
+        description="New player count. Cannot be more than the table's seats.",
+    )
 
     @field_validator("starts_at", "ends_at", "title", "player_count", mode="before")
     @classmethod

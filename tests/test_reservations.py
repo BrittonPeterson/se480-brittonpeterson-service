@@ -37,14 +37,19 @@ def test_create_without_offset_is_400_naming_the_field(client):
     assert response.headers["content-type"].startswith(PROBLEM)
     fields = {err["field"] for err in response.json()["errors"]}
     assert "starts_at" in fields
-    assert "offset" in next(err["message"] for err in response.json()["errors"] if err["field"] == "starts_at")
+    assert "offset" in next(
+        err["message"] for err in response.json()["errors"] if err["field"] == "starts_at"
+    )
 
 
 def test_create_with_end_before_start_is_400(client):
     starts_at, ends_at = window()
     response = client.post(f"/v1/tables/{TABLE}/reservations", json=body(ends_at, starts_at))
     assert response.status_code == 400
-    assert response.json()["errors"][0] == {"field": "ends_at", "message": "must be later than starts_at"}
+    assert response.json()["errors"][0] == {
+        "field": "ends_at",
+        "message": "must be later than starts_at",
+    }
 
 
 def test_create_in_the_past_is_400(client):
@@ -52,6 +57,62 @@ def test_create_in_the_past_is_400(client):
     response = client.post(f"/v1/tables/{TABLE}/reservations", json=body(starts_at, ends_at))
     assert response.status_code == 400
     assert {"field": "starts_at", "message": "must not be in the past"} in response.json()["errors"]
+
+
+def test_create_shorter_than_an_hour_is_400(client):
+    """Covers app/rules.py line 32, which the first coverage run listed as Missing."""
+    starts_at, _ = window()
+    ends_at = starts_at.replace("12:00:00", "12:30:00")
+    response = client.post(f"/v1/tables/{TABLE}/reservations", json=body(starts_at, ends_at))
+    assert response.status_code == 400
+    assert response.json()["errors"] == [
+        {"field": "ends_at", "message": "must be at least 1 hour after starts_at"}
+    ]
+
+
+def test_create_longer_than_six_hours_is_400(client):
+    starts_at, ends_at = window(hour=10, length_hours=7)
+    response = client.post(f"/v1/tables/{TABLE}/reservations", json=body(starts_at, ends_at))
+    assert response.status_code == 400
+    assert response.json()["errors"] == [
+        {"field": "ends_at", "message": "must be at most 6 hours after starts_at"}
+    ]
+
+
+def test_create_more_than_14_days_ahead_is_400(client):
+    """Covers app/rules.py line 36, which the first coverage run listed as Missing."""
+    starts_at, ends_at = window(day_offset=15)
+    response = client.post(f"/v1/tables/{TABLE}/reservations", json=body(starts_at, ends_at))
+    assert response.status_code == 400
+    assert response.json()["errors"] == [
+        {"field": "starts_at", "message": "must be within the next 14 days"}
+    ]
+
+
+def test_create_outside_open_hours_is_400(client):
+    """Covers app/rules.py line 66, which the first coverage run listed as Missing."""
+    starts_at, ends_at = window(hour=8)
+    response = client.post(f"/v1/tables/{TABLE}/reservations", json=body(starts_at, ends_at))
+    assert response.status_code == 400
+    assert response.json()["errors"] == [
+        {"field": "starts_at", "message": "must be inside open hours, 09:00 to 22:00"}
+    ]
+
+
+def test_create_with_an_unknown_requester_field_is_400(client):
+    """The spec now says Requester has additionalProperties: false; the model forbids extras."""
+    starts_at, ends_at = window()
+    payload = body(starts_at, ends_at)
+    payload["requester"]["is_admin"] = True
+    response = client.post(f"/v1/tables/{TABLE}/reservations", json=payload)
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["field"] == "requester.is_admin"
+
+
+def test_create_with_an_unknown_top_level_field_is_400(client):
+    response = create(client, table_id="tbl_2c8v5n1p")
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["field"] == "table_id"
 
 
 def test_create_over_capacity_is_400(client):
@@ -84,8 +145,16 @@ def test_overlapping_window_is_409_without_the_other_group(client):
 def test_adjacent_windows_do_not_conflict(client):
     starts_at, ends_at = window(hour=12, length_hours=2)
     later_start, later_end = window(hour=14, length_hours=2)
-    assert client.post(f"/v1/tables/{TABLE}/reservations", json=body(starts_at, ends_at)).status_code == 201
-    assert client.post(f"/v1/tables/{TABLE}/reservations", json=body(later_start, later_end)).status_code == 201
+    assert (
+        client.post(f"/v1/tables/{TABLE}/reservations", json=body(starts_at, ends_at)).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            f"/v1/tables/{TABLE}/reservations", json=body(later_start, later_end)
+        ).status_code
+        == 201
+    )
 
 
 def test_get_reservation(client):
@@ -151,7 +220,10 @@ def test_patch_moving_into_the_past_is_400(client):
         json={"starts_at": starts_at, "ends_at": ends_at},
     )
     assert response.status_code == 400
-    assert response.json()["errors"][0] == {"field": "starts_at", "message": "must not be in the past"}
+    assert response.json()["errors"][0] == {
+        "field": "starts_at",
+        "message": "must not be in the past",
+    }
 
 
 def test_patch_retitles_a_hold_that_already_started(client):
@@ -160,13 +232,49 @@ def test_patch_retitles_a_hold_that_already_started(client):
     created = create(client).json()
     rid = created["reservation_id"]
     starts_at, ends_at = window(day_offset=-1)
-    store.RESERVATIONS[rid] = store.RESERVATIONS[rid].model_copy(update={
-        "starts_at": datetime.fromisoformat(starts_at),
-        "ends_at": datetime.fromisoformat(ends_at),
-    })
+    store.RESERVATIONS[rid] = store.RESERVATIONS[rid].model_copy(
+        update={
+            "starts_at": datetime.fromisoformat(starts_at),
+            "ends_at": datetime.fromisoformat(ends_at),
+        }
+    )
     response = client.patch(f"/v1/reservations/{rid}", json={"title": "Ran long"})
     assert response.status_code == 200
     assert response.json()["title"] == "Ran long"
+
+
+def test_patch_of_a_cancelled_reservation_is_400(client):
+    """Covers app/rules.py line 92, which the first coverage run listed as Missing."""
+    created = create(client).json()
+    path = f"/v1/reservations/{created['reservation_id']}"
+    client.delete(path)
+    response = client.patch(path, json={"title": "Too late"})
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["field"] == "status"
+    assert client.get(path).json()["title"] == "Commander pod"
+
+
+def test_window_without_an_offset_is_400(client):
+    starts_at, ends_at = window()
+    response = client.get(
+        f"/v1/tables/{TABLE}/reservations",
+        params={"window_start": starts_at[:19], "window_end": ends_at},
+    )
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["field"] == "window_start"
+    assert "offset" in response.json()["errors"][0]["message"]
+
+
+def test_window_that_ends_before_it_starts_is_400(client):
+    starts_at, ends_at = window()
+    response = client.get(
+        f"/v1/tables/{TABLE}/reservations",
+        params={"window_start": ends_at, "window_end": starts_at},
+    )
+    assert response.status_code == 400
+    assert response.json()["errors"] == [
+        {"field": "window_end", "message": "must be later than window_start"}
+    ]
 
 
 def test_patch_with_no_fields_is_400(client):
@@ -185,7 +293,9 @@ def test_patch_unknown_reservation_is_404(client):
 def test_patch_into_another_reservation_is_409(client):
     first = create(client).json()
     later_start, later_end = window(hour=16, length_hours=2)
-    second = client.post(f"/v1/tables/{TABLE}/reservations", json=body(later_start, later_end)).json()
+    second = client.post(
+        f"/v1/tables/{TABLE}/reservations", json=body(later_start, later_end)
+    ).json()
     response = client.patch(
         f"/v1/reservations/{second['reservation_id']}",
         json={"starts_at": first["starts_at"], "ends_at": first["ends_at"]},

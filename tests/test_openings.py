@@ -35,7 +35,10 @@ def test_an_empty_day_is_one_stretch_from_open_to_close(client):
 
 def test_a_hold_splits_the_day(client):
     hold(client, hour=12)
-    assert [clock(row) for row in openings(client).json()] == [("09:00", "12:00"), ("14:00", "22:00")]
+    assert [clock(row) for row in openings(client).json()] == [
+        ("09:00", "12:00"),
+        ("14:00", "22:00"),
+    ]
 
 
 def test_min_length_drops_short_stretches(client):

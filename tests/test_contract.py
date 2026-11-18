@@ -21,7 +21,11 @@ schema.config.update(base_url="http://testserver/v1")
 
 
 @schema.parametrize()
-@settings(max_examples=25, deadline=None, suppress_health_check=[HealthCheck.too_slow, HealthCheck.data_too_large])
+@settings(
+    max_examples=25,
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow, HealthCheck.data_too_large],
+)
 def test_api_keeps_the_contract(case):
     case.call_and_validate()
 

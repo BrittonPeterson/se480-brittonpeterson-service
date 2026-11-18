@@ -5,12 +5,16 @@ Routers raise a Problem subclass; the handlers turn it, and anything FastAPI
 raises on its own, into the same shape with the same media type.
 """
 
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.routing import Match
+
+log = logging.getLogger("app")
 
 PROBLEM_BASE = "https://se480-brittonpeterson-service.onrender.com/problems/"
 PROBLEM_MEDIA_TYPE = "application/problem+json"
@@ -59,12 +63,16 @@ class Conflict(Problem):
     title = "The table is already held for part of that time"
 
 
-def problem_response(request: Request, status: int, slug: str, title: str, detail: str, **extra) -> JSONResponse:
+def problem_response(
+    request: Request, status: int, slug: str, title: str, detail: str, **extra
+) -> JSONResponse:
     type_url = slug if slug.startswith("about:") else PROBLEM_BASE + slug
     body = ProblemDetails(
         type=type_url, title=title, status=status, detail=detail, instance=request.url.path, **extra
     )
-    return JSONResponse(body.model_dump(exclude_none=True), status_code=status, media_type=PROBLEM_MEDIA_TYPE)
+    return JSONResponse(
+        body.model_dump(exclude_none=True), status_code=status, media_type=PROBLEM_MEDIA_TYPE
+    )
 
 
 _MESSAGES = {
@@ -81,9 +89,6 @@ def _route_tree(routes):
         original = getattr(route, "original_router", None)
         if original is not None:
             yield from _route_tree(original.routes)
-        nested = getattr(route, "routes", None)
-        if nested:
-            yield from _route_tree(nested)
 
 
 def _allowed_methods(request: Request) -> str:
@@ -113,11 +118,15 @@ def install(app: FastAPI) -> None:
     async def handle_validation(request: Request, exc: RequestValidationError):
         errors = []
         for err in exc.errors():
-            loc = [str(part) for part in err.get("loc", []) if part not in ("body", "query", "path")]
-            errors.append({
-                "field": ".".join(loc) or "body",
-                "message": _MESSAGES.get(err.get("type"), err.get("msg", "is invalid")),
-            })
+            loc = [
+                str(part) for part in err.get("loc", []) if part not in ("body", "query", "path")
+            ]
+            errors.append(
+                {
+                    "field": ".".join(loc) or "body",
+                    "message": _MESSAGES.get(err.get("type"), err.get("msg", "is invalid")),
+                }
+            )
         return problem_response(
             request,
             400,
@@ -138,8 +147,24 @@ def install(app: FastAPI) -> None:
                 "There is nothing at this path. The operations are listed at /docs.",
             )
         else:
-            response = problem_response(request, exc.status_code, "about:blank", "Request not allowed", str(exc.detail))
+            response = problem_response(
+                request, exc.status_code, "about:blank", "Request not allowed", str(exc.detail)
+            )
         response.headers.update(exc.headers or {})
         if exc.status_code == 405:
             response.headers["Allow"] = _allowed_methods(request)
         return response
+
+    @app.exception_handler(Exception)
+    async def handle_unexpected(request: Request, exc: Exception):
+        # The traceback goes to the server log, never to the caller. TestClient
+        # re-raises server errors unless created with raise_server_exceptions=False.
+        log.exception("unhandled error on %s %s", request.method, request.url.path)
+        return problem_response(
+            request,
+            500,
+            "about:blank",
+            "Something went wrong on our side",
+            "The service could not finish the request. Try again; if it keeps happening, "
+            "report the time and the path.",
+        )

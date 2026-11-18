@@ -1,9 +1,11 @@
 """Reservations: list, create, get, update, and cancel."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Annotated
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Query, Response
+from pydantic import AwareDatetime
 
 from app import rules, store
 from app.errors import Conflict, NotFound, ProblemDetails, ValidationFailed
@@ -13,19 +15,28 @@ from app.routers.tables import table_or_404
 router = APIRouter(prefix="/v1", tags=["Reservations"])
 
 PROBLEM = {"model": ProblemDetails, "content": {"application/problem+json": {}}}
-VALIDATION = {400: {**PROBLEM, "description": "A field is missing, malformed, or breaks a rule. errors lists the fields."}}
+VALIDATION = {
+    400: {
+        **PROBLEM,
+        "description": "A field is missing, malformed, or breaks a rule. errors lists the fields.",
+    }
+}
 NOT_FOUND = {404: {**PROBLEM, "description": "No table or reservation has that id."}}
-CONFLICT = {409: {**PROBLEM, "description": "The table already has a confirmed reservation in that window."}}
+CONFLICT = {
+    409: {**PROBLEM, "description": "The table already has a confirmed reservation in that window."}
+}
 
 
 def in_table_zone(reservation: Reservation, table: Table) -> Reservation:
     """The spec promises instants come back in the table's time zone."""
     tz = ZoneInfo(table.time_zone)
-    return reservation.model_copy(update={
-        "starts_at": reservation.starts_at.astimezone(tz),
-        "ends_at": reservation.ends_at.astimezone(tz),
-        "created_at": reservation.created_at.astimezone(tz),
-    })
+    return reservation.model_copy(
+        update={
+            "starts_at": reservation.starts_at.astimezone(tz),
+            "ends_at": reservation.ends_at.astimezone(tz),
+            "created_at": reservation.created_at.astimezone(tz),
+        }
+    )
 
 
 def reservation_or_404(reservation_id: str) -> Reservation:
@@ -47,14 +58,15 @@ def check_window(
     check_past: bool = True,
 ) -> None:
     """Rules first (400), then the table's state (409)."""
-    errors = rules.window_errors(starts_at, ends_at, now=datetime.now(timezone.utc), check_past=check_past)
+    errors = rules.window_errors(starts_at, ends_at, now=datetime.now(UTC), check_past=check_past)
     errors += rules.open_hours_errors(starts_at, ends_at, table.time_zone, table.open_hours)
-    if player_count is not None and player_count > table.seats:
-        errors.append({"field": "player_count", "message": f"{table.name} seats {table.seats}"})
+    errors += rules.seat_errors(player_count, table.seats, table.name)
     if errors:
         raise ValidationFailed("Fix the fields under errors and try again.", errors=errors)
 
-    conflict = rules.find_conflict(starts_at, ends_at, store.reservations_for(table.table_id), ignore_id=ignore_id)
+    conflict = rules.find_conflict(
+        starts_at, ends_at, store.reservations_for(table.table_id), ignore_id=ignore_id
+    )
     if conflict is not None:
         tz = ZoneInfo(table.time_zone)
         start, end = conflict.starts_at.astimezone(tz), conflict.ends_at.astimezone(tz)
@@ -76,28 +88,36 @@ def check_window(
 )
 def list_table_reservations(
     table_id: str,
-    window_start: datetime | None = Query(default=None, description="Include reservations that overlap at or after this instant. Requires an offset."),
-    window_end: datetime | None = Query(default=None, description="Include reservations that overlap at or before this instant. Requires an offset."),
+    window_start: Annotated[
+        AwareDatetime | None,
+        Query(
+            description=(
+                "Include reservations that overlap at or after this instant. Requires an offset."
+            ),
+        ),
+    ] = None,
+    window_end: Annotated[
+        AwareDatetime | None,
+        Query(
+            description=(
+                "Include reservations that overlap at or before this instant. Requires an offset."
+            ),
+        ),
+    ] = None,
 ) -> list[Reservation]:
     table = table_or_404(table_id)
+    errors = rules.list_window_errors(window_start, window_end)
+    if errors:
+        raise ValidationFailed("Fix the fields under errors and try again.", errors=errors)
     rows = store.reservations_for(table_id)
-    if window_start is None and window_end is None:
+    if window_start is None:
         found = rows
     else:
-        errors = []
-        if window_start is None or window_end is None:
-            errors.append({"field": "window_start", "message": "send window_start and window_end together"})
-        for name, value in (("window_start", window_start), ("window_end", window_end)):
-            if value is not None and value.tzinfo is None:
-                errors.append({"field": name, "message": "needs an offset, for example 2026-11-07T18:00:00-06:00"})
-        if errors:
-            raise ValidationFailed("Fix the fields under errors and try again.", errors=errors)
-        if window_end <= window_start:
-            raise ValidationFailed(
-                "Fix the fields under errors and try again.",
-                errors=[{"field": "window_end", "message": "must be later than window_start"}],
-            )
-        found = [row for row in rows if rules.overlaps(window_start, window_end, row.starts_at, row.ends_at)]
+        found = [
+            row
+            for row in rows
+            if rules.overlaps(window_start, window_end, row.starts_at, row.ends_at)
+        ]
     return [in_table_zone(row, table) for row in sorted(found, key=lambda row: row.starts_at)]
 
 
@@ -118,7 +138,12 @@ def list_table_reservations(
         **CONFLICT,
         201: {
             "description": "The table is held.",
-            "headers": {"Location": {"description": "Path of the new reservation on the deployed service, including /v1.", "schema": {"type": "string"}}},
+            "headers": {
+                "Location": {
+                    "description": "Path of the new reservation on the deployed service, including /v1.",
+                    "schema": {"type": "string"},
+                }
+            },
         },
     },
 )
@@ -130,7 +155,7 @@ def create_reservation(table_id: str, body: ReservationCreate, response: Respons
         reservation_id=store.new_id("rsv", 20),
         table_id=table_id,
         status="confirmed",
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     store.RESERVATIONS[reservation.reservation_id] = reservation
     response.headers["Location"] = f"/v1/reservations/{reservation.reservation_id}"
@@ -163,16 +188,9 @@ def get_reservation(reservation_id: str) -> Reservation:
 def update_reservation(reservation_id: str, body: ReservationPatch) -> Reservation:
     reservation = reservation_or_404(reservation_id)
     changes = body.model_dump(exclude_unset=True)
-    if not changes:
-        raise ValidationFailed(
-            "Fix the fields under errors and try again.",
-            errors=[{"field": "body", "message": "send at least one of starts_at, ends_at, title, or player_count"}],
-        )
-    if reservation.status == "cancelled":
-        raise ValidationFailed(
-            "Fix the fields under errors and try again.",
-            errors=[{"field": "status", "message": "a cancelled reservation cannot be changed. Create a new one."}],
-        )
+    errors = rules.patch_errors(changes, reservation.status)
+    if errors:
+        raise ValidationFailed("Fix the fields under errors and try again.", errors=errors)
     table = store.TABLES[reservation.table_id]
     updated = reservation.model_copy(update=changes)
     check_window(
@@ -194,7 +212,10 @@ def update_reservation(reservation_id: str, body: ReservationPatch) -> Reservati
     summary="Cancel a reservation",
     description="Marks the reservation cancelled. Cancelling it again still returns 204. v1 has no login, so anyone with the id can cancel it.",
     response_class=Response,
-    responses={**NOT_FOUND, 204: {"description": "The reservation is cancelled. There is no response body."}},
+    responses={
+        **NOT_FOUND,
+        204: {"description": "The reservation is cancelled. There is no response body."},
+    },
 )
 def cancel_reservation(reservation_id: str) -> Response:
     reservation = reservation_or_404(reservation_id)

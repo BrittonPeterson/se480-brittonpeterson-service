@@ -26,13 +26,31 @@ Lint the API spec, then start the mock:
     npx -y @stoplight/spectral-cli lint openapi.yaml
     npx -y @stoplight/prism-cli mock openapi.yaml --port 4010
 
-`make lint` and `make mock` run those same two commands. `make test` runs the unit tests and the contract tests.
+`make lint` and `make mock` run those same two commands.
 
 ## Test it
 
-    python -m pytest -q
+    make test
 
-The first contract run accepted a create body that set `player_count` to null. The spec does not allow null for that field, only omitting it, so the models now reject an explicit null. The same rule applies to the other optional fields.
+That is `python -m pytest -q`: the smoke test, unit tests for every operation and error, direct tests of `app/rules.py`, the 500 handler test, and the contract tests (Schemathesis against `openapi.yaml`, plus the drift check that the code and the spec declare the same operations).
+
+The first contract run in Lab 3 accepted a create body that set `player_count` to null. The spec does not allow null for that field, only omitting it, so the models now reject an explicit null. The same rule applies to the other optional fields.
+
+## Check it
+
+    make check
+
+It runs three checks and stops at the first one that fails:
+
+- `make lint-py` runs `ruff check .` and `ruff format --check .`. Clean means "All checks passed!" and "files already formatted". There are no ignores, in the config or on any line.
+- `make coverage` runs the tests with a coverage map. Clean means every test passes and the total is at or above the `fail_under = 85` floor in `pyproject.toml`. It is 100% today, and `app/rules.py` is at 100%.
+- `make audit` runs `pip-audit -r requirements.txt` against the pinned versions. Clean means "No known vulnerabilities found".
+
+CI runs the same three steps on every push. Dependencies are declared with ranges in `requirements.in` and pinned by `make pin` into `requirements.txt`, which is what CI, Render, and a Codespace install. Dependabot proposes upgrades weekly.
+
+What the first run found before it was fixed: ruff wanted 9 files reformatted and reported 7 findings (`Query(...)` calls in argument defaults, `timezone.utc` instead of `datetime.UTC`, and an unsorted import block). Coverage was 97% overall but `app/rules.py` was at 91%: the under-an-hour, more-than-14-days, closed-day, outside-open-hours, and cancelled-patch rules had never been reached by a test. The audit was clean. The `Query` findings were fixed with FastAPI's `Annotated[..., Query(...)]` form, and the rules each got a test whose docstring names the line it covers.
+
+Two notes for anyone redoing this from the course template. Its `requirements.in` asks for `httpx2>=0.28,<1`, but httpx2 releases start at 2.0, so `make pin` cannot resolve it; this repo uses `httpx2>=2,<3`. And ruff 0.17, which the template's `ruff>=0.8,<1` range allows, enables more rules by default than the template's comment lists (bugbear, pyupgrade, and import sorting among them). They were fixed here rather than turned off.
 
 ## Mock it
 
@@ -51,20 +69,32 @@ Change: a new operation, `GET /v1/tables/{table_id}/openings?date=YYYY-MM-DD`, t
 
 While implementing, explicit null on an optional field was rejected in the code rather than allowed in the spec, because the spec already says those fields are integers or strings and not null.
 
+Rules the spec gained in Lab 4: `ReservationCreate`, `ReservationPatch`, and `Requester` now say `additionalProperties: false`. The code already rejected unknown fields on create and patch, but the spec did not say so, and `requester` silently dropped them (`{"is_admin": true}` was accepted and thrown away). All three now return 400 naming the field. The list window's `window_start` and `window_end` are parsed as offset-aware date-times, so a missing offset is rejected by the model rather than by a check in the router. The rules that were still written in the routers (both window bounds or neither, the openings date range, seats, and the cancelled-patch rule) moved into `app/rules.py` so each rule lives in one place.
+
+## Known limits
+- **Double booking under concurrent requests.** The overlap check reads the store and then writes to it with no lock, so two near-simultaneous creates for the same window can both return 201. This is the failure the design sheet names. It stays unfixed, on purpose, until Week 5.
+- **The store is in memory.** Every reservation is lost when Render restarts the instance, which on the free plan happens after about fifteen idle minutes. That is also Week 5.
+- **No login.** Anyone with a reservation id can cancel it.
+- **Audit findings:** none stand. `pip-audit` reports no known vulnerabilities in the pinned versions.
+- **Coverage floor:** still 85, not lowered.
+
 ## What's here
 - `app/` — the Table Hold FastAPI service (`/v1` plus `GET /health`)
-- `tests/` — smoke, unit, and contract tests
+- `tests/` — smoke, unit, rules, error-handler, and contract tests
 - `client/example.py` — a small client that lists tables, shows a day's openings, holds one, and shows a conflict in sentences
 - `docs/proposal.md` — the Milestone 1 proposal
 - `openapi.yaml` — the Table Hold API spec
 - `design-sheet.md` — the seven-line sheet the spec was written from
 - `schemathesis.toml` — tells the contract test that 400 is a valid answer for a rule the schema cannot express
 - `.spectral.yaml` — Spectral rules for the spec
-- `Makefile` — `test`, `lint`, `mock`, and `client` targets
+- `Makefile` — `test`, `lint`, `mock`, and `client`, plus the Lab 4 targets `lint-py`, `format`, `coverage`, `audit`, `pin`, and `check`
+- `requirements.in` — the dependencies a person edits, with ranges; `requirements.txt` — the same, pinned by `make pin`
+- `pyproject.toml` — pytest, ruff, and coverage settings, including the coverage floor
+- `.github/dependabot.yml` — weekly upgrade pull requests for pip and GitHub Actions
 - `.devcontainer/` — the Codespace environment (Python 3.12 and Node, installs Python dependencies on create)
 - `Dockerfile` — the image Render builds
 - `scripts/smoke.sh` — curls a deployed `/health`
-- `.github/workflows/ci.yml` — on every push and pull request, installs dependencies and runs the tests; if the `APP_URL` repository variable is set, a second job curls that deployed `/health`
+- `.github/workflows/ci.yml` — on every push and pull request, installs the pinned dependencies, then runs ruff, the tests with the coverage floor, and pip-audit; if the `APP_URL` repository variable is set, a second job curls that deployed `/health`
 
 ## Help received
 none
@@ -73,3 +103,4 @@ none
 Lab 1: Cursor helped a little. Most of the work was done by me.
 Lab 2: Cursor drafted `openapi.yaml`, `.spectral.yaml`, the Makefile, `design-sheet.md`, and the Lab 2 sections of this README from the Table Hold design I chose. I am responsible for every line of the spec.
 Lab 3: Cursor drafted the service (`app/models.py`, `app/errors.py`, `app/rules.py`, `app/store.py`, the routers), the unit and contract tests, `client/example.py`, `schemathesis.toml`, `docs/proposal.md`, and the Lab 3 README sections, following the course reference shape and this spec. After the review, Cursor also drafted the openings operation and the past-hold rule, with their spec text and tests. I am responsible for every line.
+Lab 4: Cursor copied in the template toolchain (`requirements.in`, the pinned `requirements.txt`, the `pyproject.toml` blocks, the Makefile targets, the CI steps, `.github/dependabot.yml`) and wrote the last-resort 500 handler in `app/errors.py`. It also moved the remaining rules from the routers into `app/rules.py`, fixed the ruff findings, added `additionalProperties: false` to the spec, and wrote the new tests: `tests/test_rules.py`, `tests/test_errors.py`, and the new cases in `tests/test_reservations.py`. It drafted the Lab 4 README sections. I am responsible for every line.
