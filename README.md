@@ -7,7 +7,7 @@ Open this repository in a Codespace (Code → Codespaces → Create codespace on
 
     python -m uvicorn app.main:app --reload --port 8000
 
-Open the forwarded port 8000. `GET /health` returns `{"status":"ok"}`. The Table Hold API is under `/v1` (for example `GET /v1/tables`). Generated docs are at `/docs`. Leave the port private to your GitHub account.
+Open the forwarded port 8000. `GET /health` returns `"status": "ok"` plus the fields described under "Operate it". The Table Hold API is under `/v1` (for example `GET /v1/tables`). Generated docs are at `/docs`. Leave the port private to your GitHub account.
 
 Outside a Codespace, install dependencies first, then use the same command:
 
@@ -32,7 +32,7 @@ Lint the API spec, then start the mock:
 
     make test
 
-That is `python -m pytest -q`: the smoke test, unit tests for every operation and error, direct tests of `app/rules.py`, the 500 handler test, and the contract tests (Schemathesis against `openapi.yaml`, plus the drift check that the code and the spec declare the same operations).
+That is `python -m pytest -q`: the smoke test, unit tests for every operation and error, direct tests of `app/rules.py`, the 500 handler test, the contract tests (Schemathesis against `openapi.yaml`, plus the drift check that the code and the spec declare the same operations), the Lab 5 logging, health, and metrics tests in `tests/test_observability.py`, and `tests/test_concurrency.py`. The last one is expected to fail and is reported as `1 xfailed`. See Known limits.
 
 The first contract run in Lab 3 accepted a create body that set `player_count` to null. The spec does not allow null for that field, only omitting it, so the models now reject an explicit null. The same rule applies to the other optional fields.
 
@@ -71,16 +71,52 @@ While implementing, explicit null on an optional field was rejected in the code 
 
 Rules the spec gained in Lab 4: `ReservationCreate`, `ReservationPatch`, and `Requester` now say `additionalProperties: false`. The code already rejected unknown fields on create and patch, but the spec did not say so, and `requester` silently dropped them (`{"is_admin": true}` was accepted and thrown away). All three now return 400 naming the field. The list window's `window_start` and `window_end` are parsed as offset-aware date-times, so a missing offset is rejected by the model rather than by a check in the router. The rules that were still written in the routers (both window bounds or neither, the openings date range, seats, and the cancelled-patch rule) moved into `app/rules.py` so each rule lives in one place.
 
+## Operate it
+
+**Logs.** On Render: the service's Logs page. Locally: the terminal running uvicorn. Every request writes one JSON line with the fields `ts`, `level`, `request_id`, `method`, `route`, `status`, and `duration_ms`. `route` is the route template, like `/v1/reservations/{reservation_id}`, never the real path, so reservation ids, names, and emails never reach the log. A path that matches no route is logged as `"unmatched"`. A 5xx is logged at `ERROR`, and the 500 handler also logs the traceback with the request id and route. uvicorn's own access log is turned off (`--no-access-log` in the `Dockerfile` and `make run`), because it would log the real path and a second line per request.
+
+Three lines from Render's log, copied from the Logs page:
+
+    TODO: paste three real lines from Render's Logs page
+
+**Request ids.** Every response carries `X-Request-ID`. A caller can send its own `X-Request-ID`, which is kept if it is 8 to 64 letters, digits, `.`, `_` or `-`. Anything else is replaced with a new id. A 500's body asks the caller to report the id, and the id finds the matching log line.
+
+**Health.** `GET /health` on the deployed service, right after the SLO run:
+
+    {"status":"ok","started_at":"2026-11-23T18:34:01Z","uptime_seconds":65,"commit":"cca76c6","store":{"tables":2,"reservations":60,"confirmed":0}}
+
+`commit` is Render's `RENDER_GIT_COMMIT`, shortened, and is `"unknown"` locally. `reservations` counts every hold in memory, including cancelled ones, and `confirmed` counts the ones still held. Render's Health Check Path is `/health`. Render calls it every few seconds, so `/health` and `/metrics` are neither logged nor counted. Otherwise they would drown out the journey in both. Notifications are set to email on failures only.
+
+**Metrics.** `GET /metrics` is in Prometheus text format:
+
+- `http_requests_total{route, status}`, where `status` is the class (`2xx`, `4xx`, `5xx`)
+- `http_request_duration_seconds{route}`, a histogram with buckets from 0.05 s to 5 s
+- `table_conflicts_total`, holds refused with 409 because the table was already held
+
+Counters live in the process and start from zero on every restart.
+
+**What the log answered.** On a local run of ten hand-picked requests plus the SLO load, the log alone showed the following. The slowest request was the first create after startup, at 8.39 ms, while every other request took under 1 ms. 21 requests ended in a 4xx. The request sent with `X-Request-ID: britton-kept-0001` kept that id and was a create on `/v1/tables/{table_id}/reservations` that returned 201. The first version logged `duration_ms` in whole milliseconds, so nearly every line read 0 or 1 and "slowest" had no answer. It now has two decimals.
+
+**SLO.** 99% of journey requests not a 5xx and under one second, over 7 days. Measured once against Render, both were 315 / 315. See [docs/slo.md](docs/slo.md).
+
+**Breaking it on purpose.** Platform: setting `LAB5_FAIL_STARTUP=1` in Render's environment makes the app exit before it starts. TODO: what the Events page, the deploy log, and the email showed, the notification's subject line and time, and which commit `/health` reported while the failed deploy was refused. The failure that matters: [docs/postmortem.md](docs/postmortem.md).
+
+**Milestone 2:** [docs/milestone2.md](docs/milestone2.md).
+
 ## Known limits
-- **Double booking under concurrent requests.** The overlap check reads the store and then writes to it with no lock, so two near-simultaneous creates for the same window can both return 201. This is the failure the design sheet names. It stays unfixed, on purpose, until Week 5.
-- **The store is in memory.** Every reservation is lost when Render restarts the instance, which on the free plan happens after about fifteen idle minutes. That is also Week 5.
+- **Double booking under concurrent requests.** The overlap check reads the store and then writes to it with no lock, so two near-simultaneous creates for the same window can both return 201. This is the failure the design sheet names. It happened in 1 of 20 simultaneous pairs against Render, reproduced by [`scripts/double_hold.py`](scripts/double_hold.py). [`tests/test_concurrency.py`](tests/test_concurrency.py) reproduces it every time as an expected failure. Written up in [docs/postmortem.md](docs/postmortem.md). The fix is the Week 6 store decision and the final.
+- **The store is in memory.** Every reservation is lost when Render restarts the instance, which on the free plan happens after about fifteen idle minutes. That is also Week 6.
+- **`/metrics` is public, and its counters reset on restart.** It shows only counts by route template, with no ids or names. A restart, including Render's sleep, starts every count from zero, so a window longer than the current process can't be measured from it.
 - **No login.** Anyone with a reservation id can cancel it.
 - **Audit findings:** none stand. `pip-audit` reports no known vulnerabilities in the pinned versions.
 - **Coverage floor:** still 85, not lowered.
 
 ## What's here
-- `app/` — the Table Hold FastAPI service (`/v1` plus `GET /health`)
-- `tests/` — smoke, unit, rules, error-handler, and contract tests
+- `app/` — the Table Hold FastAPI service (`/v1` plus `GET /health` and `GET /metrics`). `app/observability.py` holds the request ids, log lines, counters, and health report.
+- `tests/` — smoke, unit, rules, error-handler, contract, observability, and concurrency tests
+- `scripts/double_hold.py` — races pairs of identical holds against a running service and reports any that were both accepted
+- `scripts/slo_load.py` — sends load along the journey and computes the SLI from `/metrics`
+- `docs/slo.md`, `docs/postmortem.md`, `docs/milestone2.md` — the Lab 5 SLO, the double-booking postmortem, and the Milestone 2 status page
 - `client/example.py` — a small client that lists tables, shows a day's openings, holds one, and shows a conflict in sentences
 - `docs/proposal.md` — the Milestone 1 proposal
 - `openapi.yaml` — the Table Hold API spec
@@ -104,3 +140,4 @@ Lab 1: Cursor helped a little. Most of the work was done by me.
 Lab 2: Cursor drafted `openapi.yaml`, `.spectral.yaml`, the Makefile, `design-sheet.md`, and the Lab 2 sections of this README from the Table Hold design I chose. I am responsible for every line of the spec.
 Lab 3: Cursor drafted the service (`app/models.py`, `app/errors.py`, `app/rules.py`, `app/store.py`, the routers), the unit and contract tests, `client/example.py`, `schemathesis.toml`, `docs/proposal.md`, and the Lab 3 README sections, following the course reference shape and this spec. After the review, Cursor also drafted the openings operation and the past-hold rule, with their spec text and tests. I am responsible for every line.
 Lab 4: Cursor copied in the template toolchain (`requirements.in`, the pinned `requirements.txt`, the `pyproject.toml` blocks, the Makefile targets, the CI steps, `.github/dependabot.yml`) and wrote the last-resort 500 handler in `app/errors.py`. It also moved the remaining rules from the routers into `app/rules.py`, fixed the ruff findings, added `additionalProperties: false` to the spec, and wrote the new tests: `tests/test_rules.py`, `tests/test_errors.py`, and the new cases in `tests/test_reservations.py`. It drafted the Lab 4 README sections. I am responsible for every line.
+Lab 5: Cursor wrote `app/observability.py` (following the course reference shape), the `/health` and `/metrics` changes, the conflict counter, `tests/test_observability.py`, `tests/test_concurrency.py`, both scripts in `scripts/`, and drafts of `docs/slo.md`, `docs/postmortem.md`, `docs/milestone2.md`, and the Lab 5 README sections. It also ran the measurements quoted in them. I am responsible for every line.
