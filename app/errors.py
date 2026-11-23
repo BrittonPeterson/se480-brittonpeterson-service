@@ -14,6 +14,8 @@ from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.routing import Match
 
+from app import observability
+
 log = logging.getLogger("app")
 
 PROBLEM_BASE = "https://se480-brittonpeterson-service.onrender.com/problems/"
@@ -158,14 +160,25 @@ def install(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def handle_unexpected(request: Request, exc: Exception):
-        # The traceback goes to the server log, never to the caller. TestClient
-        # re-raises server errors unless created with raise_server_exceptions=False.
-        log.exception("unhandled error on %s %s", request.method, request.url.path)
-        return problem_response(
+        # The traceback goes to the server log, never to the caller. The record
+        # carries the request id and the route template, not the raw path, which
+        # can hold a reservation id. This handler runs outside the request
+        # middleware, so it sets X-Request-ID itself. TestClient re-raises server
+        # errors unless created with raise_server_exceptions=False.
+        rid = observability.request_id(request)
+        log.exception(
+            "unhandled error request_id=%s method=%s route=%s",
+            rid,
+            request.method,
+            observability.route_template(request),
+        )
+        response = problem_response(
             request,
             500,
             "about:blank",
             "Something went wrong on our side",
             "The service could not finish the request. Try again; if it keeps happening, "
-            "report the time and the path.",
+            f"report this request id: {rid}. It is also in the X-Request-ID header.",
         )
+        response.headers[observability.REQUEST_ID_HEADER] = rid
+        return response

@@ -1,7 +1,7 @@
 .PHONY: run test lint mock client lint-py format coverage audit pin check
 
 run:
-	python -m uvicorn app.main:app --reload --port 8000
+	python -m uvicorn app.main:app --reload --port 8000 --no-access-log
 
 test:
 	python -m pytest -q

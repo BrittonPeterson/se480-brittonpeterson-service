@@ -5,6 +5,7 @@ from typing import Annotated
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Query, Response
+from prometheus_client import Counter
 from pydantic import AwareDatetime
 
 from app import rules, store
@@ -13,6 +14,14 @@ from app.models import Reservation, ReservationCreate, ReservationPatch, Table
 from app.routers.tables import table_or_404
 
 router = APIRouter(prefix="/v1", tags=["Reservations"])
+
+# The one counter from this service's rules: every create or move the overlap
+# check refused with 409. The failure that matters is the double hold this
+# counter should have counted and did not.
+CONFLICTS = Counter(
+    "table_conflicts_total",
+    "Creates and moves refused with 409 because the table was already held for part of the window.",
+)
 
 PROBLEM = {"model": ProblemDetails, "content": {"application/problem+json": {}}}
 VALIDATION = {
@@ -68,6 +77,7 @@ def check_window(
         starts_at, ends_at, store.reservations_for(table.table_id), ignore_id=ignore_id
     )
     if conflict is not None:
+        CONFLICTS.inc()
         tz = ZoneInfo(table.time_zone)
         start, end = conflict.starts_at.astimezone(tz), conflict.ends_at.astimezone(tz)
         raise Conflict(

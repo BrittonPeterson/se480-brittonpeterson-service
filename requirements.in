@@ -7,6 +7,7 @@
 fastapi>=0.115,<1
 uvicorn[standard]>=0.30,<1
 tzdata
+prometheus-client>=0.20,<1  # Lab 5: counters and the /metrics text format
 
 # Tests
 pytest>=8,<10
