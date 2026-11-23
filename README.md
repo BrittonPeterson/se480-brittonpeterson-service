@@ -75,9 +75,11 @@ Rules the spec gained in Lab 4: `ReservationCreate`, `ReservationPatch`, and `Re
 
 **Logs.** On Render: the service's Logs page. Locally: the terminal running uvicorn. Every request writes one JSON line with the fields `ts`, `level`, `request_id`, `method`, `route`, `status`, and `duration_ms`. `route` is the route template, like `/v1/reservations/{reservation_id}`, never the real path, so reservation ids, names, and emails never reach the log. A path that matches no route is logged as `"unmatched"`. A 5xx is logged at `ERROR`, and the 500 handler also logs the traceback with the request id and route. uvicorn's own access log is turned off (`--no-access-log` in the `Dockerfile` and `make run`), because it would log the real path and a second line per request.
 
-Three lines from Render's log, copied from the Logs page:
+Three lines from Render's log, found on the Logs page by searching for their request ids. These are the double-booking run in [docs/postmortem.md](docs/postmortem.md): a refused duplicate, then the two creates that were both accepted, 1 ms apart.
 
-    TODO: paste three real lines from Render's Logs page
+    {"ts":"2026-11-23T18:35:18.131Z","level":"INFO","request_id":"d8a291d3e17ef4c5","method":"POST","route":"/v1/tables/{table_id}/reservations","status":409,"duration_ms":1.38}
+    {"ts":"2026-11-23T18:35:19.353Z","level":"INFO","request_id":"13cff083a76a3600","method":"POST","route":"/v1/tables/{table_id}/reservations","status":201,"duration_ms":2.25}
+    {"ts":"2026-11-23T18:35:19.354Z","level":"INFO","request_id":"8632340d2df162c0","method":"POST","route":"/v1/tables/{table_id}/reservations","status":201,"duration_ms":3.05}
 
 **Request ids.** Every response carries `X-Request-ID`. A caller can send its own `X-Request-ID`, which is kept if it is 8 to 64 letters, digits, `.`, `_` or `-`. Anything else is replaced with a new id. A 500's body asks the caller to report the id, and the id finds the matching log line.
 
@@ -85,7 +87,7 @@ Three lines from Render's log, copied from the Logs page:
 
     {"status":"ok","started_at":"2026-11-23T18:34:01Z","uptime_seconds":65,"commit":"cca76c6","store":{"tables":2,"reservations":60,"confirmed":0}}
 
-`commit` is Render's `RENDER_GIT_COMMIT`, shortened, and is `"unknown"` locally. `reservations` counts every hold in memory, including cancelled ones, and `confirmed` counts the ones still held. Render's Health Check Path is `/health`. Render calls it every few seconds, so `/health` and `/metrics` are neither logged nor counted. Otherwise they would drown out the journey in both. Notifications are set to email on failures only.
+`commit` is Render's `RENDER_GIT_COMMIT`, shortened, and is `"unknown"` locally. `reservations` counts every hold in memory, including cancelled ones, and `confirmed` counts the ones still held. Render's Health Check Path is `/health`. Render calls it every few seconds, so `/health` and `/metrics` are neither logged nor counted. Otherwise they would drown out the journey in both. The service's notifications use the workspace default, "Only failure notifications".
 
 **Metrics.** `GET /metrics` is in Prometheus text format:
 
@@ -99,7 +101,7 @@ Counters live in the process and start from zero on every restart.
 
 **SLO.** 99% of journey requests not a 5xx and under one second, over 7 days. Measured once against Render, both were 315 / 315. See [docs/slo.md](docs/slo.md).
 
-**Breaking it on purpose.** Platform: setting `LAB5_FAIL_STARTUP=1` in Render's environment makes the app exit before it starts. TODO: what the Events page, the deploy log, and the email showed, the notification's subject line and time, and which commit `/health` reported while the failed deploy was refused. The failure that matters: [docs/postmortem.md](docs/postmortem.md).
+**Breaking it on purpose.** Platform: setting `LAB5_FAIL_STARTUP=1` in Render's environment makes the app exit before it starts. It was set on Mon Nov 23, 2026 at 1:56 PM CST with "Save, rebuild, and deploy". The image built from cache in about 2 seconds. The deploy log then showed `LAB5_FAIL_STARTUP=1: refusing to start, on purpose (Lab 5, task 6).` at 1:56:34 PM, followed by `==> Exited with status 1` at 1:56:36. Render restarted the instance at 1:56:37, and it refused again. The Events page recorded "Deploy failed for 201557a", and the notice said "Exited with status 1 while running your code." The old instance kept serving throughout: `/health`, polled every 15 seconds from 1:56 to 2:01 PM, answered `ok` with commit `201557a` every time. Its `started_at` changed once, to 19:56:51Z, during the failed deploy. The dashboard doesn't say why. Deleting the variable started a new deploy at 1:59 PM, which went live the same minute (`started_at` 19:59:34Z). TODO: the failure email's subject line and arrival time. The failure that matters: [docs/postmortem.md](docs/postmortem.md).
 
 **Milestone 2:** [docs/milestone2.md](docs/milestone2.md).
 

@@ -30,6 +30,7 @@ All times Nov 23, 2026, UTC. The holds were for Nov 24 and 25.
 | 18:35:19 | The pair for Nov 25 09:00 gets two 201s, request ids `8632340d2df162c0` and `13cff083a76a3600`. |
 | 18:35:20 | Seven more pairs get one 201 and one 409. `/health` reports 81 reservations, 21 confirmed. There should have been 20. |
 | 18:35:20 | The script cancels all 21 holds it created. |
+| 19:55 | Both request ids are found in Render's log: two POST lines on `/v1/tables/{table_id}/reservations`, both 201 and INFO, at 18:35:19.353 and 18:35:19.354. They took 2.25 and 3.05 ms, so the two requests were in flight together. |
 | Later | Decision: no fix in Lab 5. The failure is recorded in Known limits, and the fix goes to the Week 6 store decision. |
 
 The times come from `/health`'s `uptime_seconds` (76 before the run, 79 after) added to `started_at`.
