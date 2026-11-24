@@ -2,6 +2,7 @@
 
 - **Deployed at:** https://se480-brittonpeterson-service.onrender.com
 - **Demo video:** https://drive.google.com/file/d/1g16J17unAUxJT_AtcAefqn0tQU42ktoT/view?usp=sharing
+- **Transcript:** [docs/milestone2-transcript.md](milestone2-transcript.md)
 ## What shipped, against the proposal
 
 - **The eight operations in `openapi.yaml` v1, deployed.** These are list tables, get a table, a day's openings, a table's holds, create a hold, and get, move, or cancel a hold. Try `GET /v1/tables` on the deployed URL, or read `/docs`. The contract and drift tests in `tests/` check the code against the spec on every push.
