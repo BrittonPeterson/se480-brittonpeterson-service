@@ -137,7 +137,7 @@ Don't show the Render **Environment** page or any settings page during the recor
 
 **What you'll see:**
 
-    {"status":"ok","started_at":"...","uptime_seconds":...,"commit":"716fe45","store":{"tables":2,"reservations":...,"confirmed":...}}
+    {"status":"ok","started_at":"...","uptime_seconds":...,"commit":"<latest commit on main>","store":{"tables":2,"reservations":...,"confirmed":...}}
 
 **Say:**
 > Health reports when this instance started, which commit is deployed, and how many holds are in memory. That's what the proposal promised for this milestone.
