@@ -1,7 +1,7 @@
 # Milestone 2 status: Table Hold
 
 - **Deployed at:** https://se480-brittonpeterson-service.onrender.com
-- **Demo video:** TODO: link
+- **Demo video:** https://drive.google.com/file/d/1g16J17unAUxJT_AtcAefqn0tQU42ktoT/view?usp=sharing
 - **Transcript, if the video has no captions:** [docs/milestone2-video-script.md](milestone2-video-script.md)
 
 ## What shipped, against the proposal
