@@ -2,7 +2,7 @@
 
 - **Deployed at:** https://se480-brittonpeterson-service.onrender.com
 - **Demo video:** TODO: link
-- **Transcript, if the video has no captions:** TODO: link, or the text below
+- **Transcript, if the video has no captions:** [docs/milestone2-video-script.md](milestone2-video-script.md)
 
 ## What shipped, against the proposal
 
