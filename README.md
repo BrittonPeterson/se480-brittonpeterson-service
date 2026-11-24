@@ -118,7 +118,7 @@ Counters live in the process and start from zero on every restart.
 - `tests/` — smoke, unit, rules, error-handler, contract, observability, and concurrency tests
 - `scripts/double_hold.py` — races pairs of identical holds against a running service and reports any that were both accepted
 - `scripts/slo_load.py` — sends load along the journey and computes the SLI from `/metrics`
-- `docs/slo.md`, `docs/postmortem.md`, `docs/milestone2.md` — the Lab 5 SLO, the double-booking postmortem, and the Milestone 2 status page; `docs/milestone2-video-script.md` is the demo's script and transcript
+- `docs/slo.md`, `docs/postmortem.md`, `docs/milestone2.md` — the Lab 5 SLO, the double-booking postmortem, and the Milestone 2 status page
 - `client/example.py` — a small client that lists tables, shows a day's openings, holds one, and shows a conflict in sentences
 - `docs/proposal.md` — the Milestone 1 proposal
 - `openapi.yaml` — the Table Hold API spec
