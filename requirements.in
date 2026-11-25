@@ -13,7 +13,7 @@ prometheus-client>=0.20,<1  # Lab 5: counters and the /metrics text format
 pytest>=8,<10
 pytest-cov>=5,<8
 httpx2>=2,<3
-pyyaml>=6,<7
+pyyaml>=6.0.4,<7
 schemathesis>=4,<5
 
 # Lab 4 checks
